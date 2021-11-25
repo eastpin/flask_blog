@@ -13,7 +13,7 @@ def get_db_connection():
         host="localhost",
         user="root",
         password="",
-        database="flaskblog"
+        database="flaskmysql"
     )
 
     return mydb
