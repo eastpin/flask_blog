@@ -1,29 +1,71 @@
-import sqlite3
 from flask import Flask, render_template, request, url_for, flash, redirect
 from werkzeug.exceptions import abort
 
-def get_db_connection():
-    conn = sqlite3.connect('database.db')
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def get_post(post_id):
-    conn = get_db_connection()
-    post = conn.execute('SELECT * FROM posts WHERE id = ?',
-                        (post_id,)).fetchone()
-    conn.close()
-    if post is None:
-        abort(404)
-    return post
+# mengimport mysql connector
+import mysql.connector
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your secret key'
 
+# mengubah get connection method untuk mereturn mydb
+def get_db_connection():
+    mydb = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="",
+        database="flaskblog"
+    )
+
+    return mydb
+
+def get_post(post_id):
+    mydb = get_db_connection()
+
+    cursor = mydb.cursor()
+    
+    cursor.execute(
+        'SELECT * FROM posts WHERE id = %s',
+        (post_id,)
+    )
+    result = cursor.fetchone()
+
+    # mengubah format hasil query sesuai template karena hasil query berbentuk list
+    post = {
+        'id': result[0],
+        'created': result[1],
+        'title': result[2],
+        'content': result[3]
+    }
+    
+    mydb.close()
+
+    if post is None:
+        abort(404)
+    return post
+
 @app.route('/')
 def index():
-    conn = get_db_connection()
-    posts = conn.execute('SELECT * FROM posts').fetchall()
-    conn.close()
+    mydb = get_db_connection()
+
+    cursor = mydb.cursor()
+
+    cursor.execute('SELECT * FROM posts')
+
+    result = cursor.fetchall()
+
+    # mengubah format hasil query sesuai template karena hasil query berbentuk list
+    posts = []
+    for entry in result:
+        record = {
+            'id': entry[0],
+            'created': entry[1],
+            'title': entry[2],
+            'content': entry[3]
+        }
+        posts.append(record)
+
+    mydb.close()
+    
     return render_template('index.html', posts=posts)
 
 @app.route('/<int:post_id>')
@@ -40,12 +82,16 @@ def create():
         if not title:
             flash('Title is required!')
         else:
-            conn = get_db_connection()
-            conn.execute('INSERT INTO posts (title, content) VALUES (?, ?)',
+            mydb = get_db_connection()
+
+            cursor = mydb.cursor()
+
+            cursor.execute('INSERT INTO posts (title, content) VALUES (%s, %s)',
                          (title, content))
-            conn.commit()
-            conn.close()
+            mydb.commit()
+            mydb.close()
             return redirect(url_for('index'))
+
     return render_template('create.html')
 
 @app.route('/<int:id>/edit', methods=('GET', 'POST'))
@@ -58,13 +104,16 @@ def edit(id):
 
         if not title:
             flash('Title is required!')
-        else:
-            conn = get_db_connection()
-            conn.execute('UPDATE posts SET title = ?, content = ?'
-                         ' WHERE id = ?',
+        else:      
+            mydb = get_db_connection()
+
+            cursor = mydb.cursor()
+            
+            cursor.execute('UPDATE posts SET title = %s, content = %s'
+                         ' WHERE id = %s',
                          (title, content, id))
-            conn.commit()
-            conn.close()
+            mydb.commit()
+            mydb.close()
             return redirect(url_for('index'))
 
     return render_template('edit.html', post=post)
@@ -72,9 +121,13 @@ def edit(id):
 @app.route('/<int:id>/delete', methods=('POST',))
 def delete(id):
     post = get_post(id)
-    conn = get_db_connection()
-    conn.execute('DELETE FROM posts WHERE id = ?', (id,))
-    conn.commit()
-    conn.close()
+
+    mydb = get_db_connection()
+
+    cursor = mydb.cursor()
+    
+    cursor.execute('DELETE FROM posts WHERE id = %s', (id,))
+    mydb.commit()
+    mydb.close()
     flash('"{}" was successfully deleted!'.format(post['title']))
     return redirect(url_for('index'))
